@@ -293,7 +293,168 @@ function CheckSection({title, emoji, items, checks, onToggle, onReorder, onEdit,
     </div>
   );
 }
+ function MilestoneCategoryCard({
+  cat,
+  phaseFilter,
+  editMode,
+  msChecks,
+  collapsed,
+  setCollapsed,
+  togMs,
+  editMs,
+  deleteMs,
+  addMs,
+  reorderMs,
+  saveData,
+  data
+}) {
+  const dragIdx = React.useRef(null);
+  const [overIdx, setOverIdx] = React.useState(null);
 
+  const color = CAT_COLORS[cat.id] || "#888";
+  const visible = cat.milestones.filter(
+    m => phaseFilter === "all" || m.p === parseInt(phaseFilter)
+  );
+
+  if (!visible.length && !editMode) return null;
+
+  const catDone = cat.milestones.filter(m => msChecks[m.id]).length;
+  const isCol = collapsed[cat.id];
+
+  return (
+    <div style={{border:"0.5px solid #e8e8e8",borderRadius:14,padding:"12px 14px",background:"#fff"}}>
+
+      {/* header */}
+      <div
+        onClick={() => !editMode && setCollapsed(c => ({...c, [cat.id]: !c[cat.id]}))}
+        style={{display:"flex",alignItems:"center",gap:8,marginBottom:isCol && !editMode ? 0 : 10,cursor:"pointer"}}
+      >
+        <div style={{width:8,height:8,borderRadius:"50%",background:color}} />
+
+        {editMode ? (
+          <InlineEdit
+            value={cat.name}
+            onSave={v =>
+              saveData({
+                ...data,
+                categories: data.categories.map(c =>
+                  c.id === cat.id ? { ...c, name: v } : c
+                )
+              })
+            }
+            style={{fontSize:13,fontWeight:600,flex:1}}
+          />
+        ) : (
+          <span style={{fontSize:13,fontWeight:600,flex:1}}>
+            {cat.name}
+          </span>
+        )}
+
+        <span style={{fontSize:11,color:"#aaa"}}>
+          {catDone}/{cat.milestones.length}
+        </span>
+      </div>
+
+      {(!isCol || editMode) && (
+        <>
+          <Bar
+            pct={
+              cat.milestones.length
+                ? Math.round((catDone / cat.milestones.length) * 100)
+                : 0
+            }
+            color={color}
+          />
+
+          <div style={{marginTop:10}}>
+            {(editMode ? cat.milestones : visible).map((ms, i) => {
+              const done = !!msChecks[ms.id];
+
+              return (
+                <div
+                  key={ms.id}
+                  draggable={editMode}
+                  onDragStart={() => (dragIdx.current = i)}
+                  onDragOver={e => {
+                    e.preventDefault();
+                    setOverIdx(i);
+                  }}
+                  onDrop={() => {
+                    if (dragIdx.current === null || dragIdx.current === i) return;
+
+                    const next = [...cat.milestones];
+                    const [moved] = next.splice(dragIdx.current, 1);
+                    next.splice(i, 0, moved);
+
+                    reorderMs(cat.id, next);
+                    dragIdx.current = null;
+                    setOverIdx(null);
+                  }}
+                  onDragEnd={() => {
+                    dragIdx.current = null;
+                    setOverIdx(null);
+                  }}
+                  style={{
+                    display:"flex",
+                    gap:9,
+                    padding:"7px 6px",
+                    borderBottom:"0.5px solid #f0f0f0",
+                    background: overIdx === i && editMode ? "#f0f7ff" : "transparent",
+                    cursor: editMode ? "grab" : "pointer"
+                  }}
+                >
+                  {editMode && <span style={{color:"#ccc"}}>⠿</span>}
+
+                  <div onClick={() => !editMode && togMs(ms.id)}>
+                    <Tick done={done} color={color} />
+                  </div>
+
+                  <div style={{flex:1}}>
+                    {editMode ? (
+                      <InlineEdit
+                        value={ms.t}
+                        onSave={v => editMs(cat.id, ms.id, "t", v)}
+                        multiline
+                        style={{fontSize:12}}
+                      />
+                    ) : (
+                      <div style={{
+                        fontSize:12,
+                        color: done ? "#bbb" : "#333",
+                        textDecoration: done ? "line-through" : "none"
+                      }}>
+                        {ms.t}
+                      </div>
+                    )}
+                  </div>
+
+                  {editMode && (
+                    <button
+                      onClick={() => deleteMs(cat.id, ms.id)}
+                      style={{border:"none",background:"none",color:"#ddd"}}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+
+            {editMode && (
+              <button
+                onClick={() => addMs(cat.id)}
+                style={{marginTop:8,width:"100%",border:"1px dashed #ccc"}}
+              >
+                + add milestone
+              </button>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+ 
 // ── main app ──────────────────────────────────────────────────────────────────
 function App() {
   const [tab, setTab]               = useState("today");
@@ -389,93 +550,41 @@ function App() {
   };
 
   // ── milestones ─────────────────────────────────────────────────────────────
-  const MilestonesTab = () => (
-    <div>
-      <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
-        {[["all","#555"],["1",PC[1]],["2",PC[2]],["3",PC[3]]].map(([val,col])=>(
-          <button key={val} onClick={()=>setPhaseFilter(val)} style={{fontSize:11,padding:"4px 12px",borderRadius:20,cursor:"pointer",border:phaseFilter===val?"none":"0.5px solid #ccc",background:phaseFilter===val?col:"transparent",color:phaseFilter===val?"#fff":"#666",fontWeight:phaseFilter===val?600:400,transition:"all .15s"}}>
-            {val==="all"?"All phases":`Phase ${val}`}
-          </button>
-        ))}
-      </div>
-
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        {data.categories.map(cat => {
-          const color = CAT_COLORS[cat.id] || "#888";
-          const visible = cat.milestones.filter(m=>phaseFilter==="all"||m.p===parseInt(phaseFilter));
-          if (!visible.length && !editMode) return null;
-          const catDone = cat.milestones.filter(m=>msChecks[m.id]).length;
-          const isCol = collapsed[cat.id];
-          const dragIdx = useRef(null);
-          const [overIdx, setOverIdx] = useState(null);
-
-          return (
-            <div key={cat.id} style={{border:"0.5px solid #e8e8e8",borderRadius:14,padding:"12px 14px",background:"#fff"}}>
-              <div onClick={()=>!editMode&&togCol(cat.id)} style={{display:"flex",alignItems:"center",gap:8,marginBottom:isCol&&!editMode?0:10,cursor:"pointer",userSelect:"none"}}>
-                <div style={{width:8,height:8,borderRadius:"50%",background:color,flexShrink:0}}/>
-                {editMode
-                  ? <InlineEdit value={cat.name} onSave={v=>saveData({...data,categories:data.categories.map(c=>c.id===cat.id?{...c,name:v}:c)})} style={{fontSize:13,fontWeight:600,flex:1}}/>
-                  : <span style={{fontSize:13,fontWeight:600,flex:1,lineHeight:1.3}}>{cat.name}</span>}
-                <span style={{fontSize:11,color:"#aaa",flexShrink:0}}>{catDone}/{cat.milestones.length}</span>
-                {!editMode && <span style={{fontSize:11,color:"#ccc",transform:isCol?"rotate(-90deg)":"none",display:"inline-block",transition:"transform .2s"}}>▾</span>}
-              </div>
-
-              {(!isCol || editMode) && <>
-                <Bar pct={cat.milestones.length?Math.round((catDone/cat.milestones.length)*100):0} color={color}/>
-                <div style={{marginTop:10}}>
-                  {(editMode ? cat.milestones : visible).map((ms,i)=>{
-                    const done = !!msChecks[ms.id];
-                    return (
-                      <div key={ms.id}
-                        draggable={editMode}
-                        onDragStart={()=>{dragIdx.current=i;}}
-                        onDragOver={e=>{e.preventDefault();setOverIdx(i);}}
-                        onDragLeave={()=>setOverIdx(null)}
-                        onDrop={()=>{
-                          if(dragIdx.current===null||dragIdx.current===i){setOverIdx(null);return;}
-                          const next=[...cat.milestones];
-                          const [moved]=next.splice(dragIdx.current,1);
-                          next.splice(i,0,moved);
-                          reorderMs(cat.id,next);
-                          dragIdx.current=null;setOverIdx(null);
-                        }}
-                        onDragEnd={()=>{dragIdx.current=null;setOverIdx(null);}}
-                        style={{display:"flex",alignItems:"flex-start",gap:9,padding:"7px 6px",borderRadius:8,borderBottom:"0.5px solid #f0f0f0",cursor:editMode?"grab":"pointer",background:overIdx===i&&editMode?"#f0f7ff":"transparent",transition:"background .1s"}}
-                        onMouseEnter={e=>{if(!editMode)e.currentTarget.style.background="#f5f5f4"}}
-                        onMouseLeave={e=>{if(!editMode)e.currentTarget.style.background="transparent"}}>
-                        {editMode && <span style={{color:"#ccc",fontSize:14,marginTop:2,flexShrink:0}}>⠿</span>}
-                        <div onClick={()=>!editMode&&togMs(ms.id)} style={{marginTop:2,flexShrink:0}}>
-                          <Tick done={done} color={color}/>
-                        </div>
-                        <div style={{flex:1,minWidth:0}}>
-                          {editMode
-                            ? <InlineEdit value={ms.t} onSave={v=>editMs(cat.id,ms.id,"t",v)} multiline style={{fontSize:12}}/>
-                            : <div style={{fontSize:12,color:done?"#bbb":"#333",textDecoration:done?"line-through":"none",lineHeight:1.45}}>{ms.t}</div>}
-                          <div style={{display:"flex",gap:5,marginTop:3,alignItems:"center",flexWrap:"wrap"}}>
-                            {editMode
-                              ? <select value={ms.p} onChange={e=>editMs(cat.id,ms.id,"p",parseInt(e.target.value))} style={{fontSize:10,border:"1px solid #ddd",borderRadius:6,padding:"1px 4px",color:PC[ms.p]}}>
-                                  <option value={1}>Phase 1</option><option value={2}>Phase 2</option><option value={3}>Phase 3</option>
-                                </select>
-                              : <span style={{fontSize:10,fontWeight:600,color:PC[ms.p]}}>Ph.{ms.p}</span>}
-                            {editMode
-                              ? <input value={ms.tag} onChange={e=>editMs(cat.id,ms.id,"tag",e.target.value)} placeholder="tag" style={{fontSize:10,border:"1px solid #ddd",borderRadius:6,padding:"1px 6px",width:70}}/>
-                              : ms.tag && <Pill label={ms.tag}/>}
-                          </div>
-                        </div>
-                        {editMode && <button onClick={()=>deleteMs(cat.id,ms.id)} style={{flexShrink:0,border:"none",background:"none",color:"#ddd",cursor:"pointer",fontSize:16,padding:"0 2px"}} onMouseEnter={e=>e.currentTarget.style.color="#e24b4a"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>×</button>}
-                      </div>
-                    );
-                  })}
-                  {editMode && <button onClick={()=>addMs(cat.id)} style={{marginTop:8,width:"100%",padding:"6px",border:"1px dashed #d0d0d0",borderRadius:8,background:"transparent",color:"#aaa",cursor:"pointer",fontSize:12,transition:"all .15s"}} onMouseEnter={e=>{e.currentTarget.style.borderColor="#378ADD";e.currentTarget.style.color="#378ADD"}} onMouseLeave={e=>{e.currentTarget.style.borderColor="#d0d0d0";e.currentTarget.style.color="#aaa"}}>+ add milestone</button>}
-                </div>
-              </>}
-            </div>
-          );
-        })}
-      </div>
+const MilestonesTab = () => (
+  <div>
+    <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
+      {["all","1","2","3"].map(val => (
+        <button
+          key={val}
+          onClick={() => setPhaseFilter(val)}
+        >
+          {val === "all" ? "All phases" : `Phase ${val}`}
+        </button>
+      ))}
     </div>
-  );
 
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+      {data.categories.map(cat => (
+        <MilestoneCategoryCard
+          key={cat.id}
+          cat={cat}
+          phaseFilter={phaseFilter}
+          editMode={editMode}
+          msChecks={msChecks}
+          collapsed={collapsed}
+          setCollapsed={togCol}
+          togMs={togMs}
+          editMs={editMs}
+          deleteMs={deleteMs}
+          addMs={addMs}
+          reorderMs={reorderMs}
+          saveData={saveData}
+          data={data}
+        />
+      ))}
+    </div>
+  </div>
+);
   // ── progress ───────────────────────────────────────────────────────────────
   const ProgressTab = () => (
     <div>
