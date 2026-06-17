@@ -1,0 +1,604 @@
+bash
+
+cat > /mnt/user-data/outputs/life-plan.html << 'HTMLEOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Life Change Roadmap</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,-apple-system,sans-serif;background:#f9f9f8;color:#111;font-size:14px}
+  input,textarea{font-family:inherit;font-size:13px}
+  ::-webkit-scrollbar{width:4px;height:4px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:#ddd;border-radius:2px}
+  .drag-over{outline:2px dashed #378ADD;outline-offset:2px;border-radius:8px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ── colours ──────────────────────────────────────────────────────────────────
+const CAT_COLORS = {
+  career:  "#378ADD", driving: "#1D9E75", health: "#7F77DD",
+  income:  "#EF9F27", life:    "#D85A30",
+};
+const PC = { 1:"#1D9E75", 2:"#378ADD", 3:"#7F77DD" };
+
+// ── default data ──────────────────────────────────────────────────────────────
+const DEFAULT_DATA = {
+  morningRoutine: [
+    {id:"mr1", text:"Wake by 7:30am — get up immediately, no snoozing"},
+    {id:"mr2", text:"Drink a full glass of water"},
+    {id:"mr3", text:"Physio rehab exercises (10–15 min)"},
+    {id:"mr4", text:"Quick shower & get dressed"},
+    {id:"mr5", text:"Eat a proper breakfast (don't skip)"},
+    {id:"mr6", text:"Review today's flexible tasks (2 min)"},
+  ],
+  eveningRoutine: [
+    {id:"er1", text:"Prep tomorrow's meals or check meal plan"},
+    {id:"er2", text:"30 min of qualification study"},
+    {id:"er3", text:"15 min side project work (even a small task counts)"},
+    {id:"er4", text:"No screens from 10:30pm"},
+    {id:"er5", text:"In bed by 11pm"},
+  ],
+  flexTasks: [
+    {id:"ft1",  text:"Strength session (push day)",                          cat:"health",  tag:"gym"},
+    {id:"ft2",  text:"Strength session (pull day)",                          cat:"health",  tag:"gym"},
+    {id:"ft3",  text:"Strength session (carry / core)",                      cat:"health",  tag:"gym"},
+    {id:"ft4",  text:"Extra qualification study block (45 min+)",            cat:"career",  tag:"study"},
+    {id:"ft5",  text:"Driving theory practice (20 min)",                     cat:"driving", tag:"study"},
+    {id:"ft6",  text:"Driving lesson",                                        cat:"driving", tag:"lesson"},
+    {id:"ft7",  text:"Side project: build / code session",                   cat:"income",  tag:"build"},
+    {id:"ft8",  text:"Side project: marketing / community post",             cat:"income",  tag:"market"},
+    {id:"ft9",  text:"Cook a new recipe from scratch",                       cat:"life",    tag:"cooking"},
+    {id:"ft10", text:"Meal prep batch cooking session",                      cat:"life",    tag:"cooking"},
+    {id:"ft11", text:"Research target cities / neighbourhoods",              cat:"life",    tag:"move"},
+    {id:"ft12", text:"Physio appointment",                                    cat:"health",  tag:"injury"},
+    {id:"ft13", text:"Low-impact cardio session (swim / cycle)",             cat:"health",  tag:"cardio"},
+    {id:"ft14", text:"Job search: research / apply / network",               cat:"career",  tag:"job hunt"},
+  ],
+  weeklyTasks: [
+    {id:"wt1", text:"Meal plan and grocery shop for the week",               cat:"life"},
+    {id:"wt2", text:"One full qualification study session (1 hr+)",          cat:"career"},
+    {id:"wt3", text:"3 strength sessions completed this week",               cat:"health"},
+    {id:"wt4", text:"Physio protocol followed all 3 sessions",               cat:"health"},
+    {id:"wt5", text:"At least one meaningful side project task done",        cat:"income"},
+    {id:"wt6", text:"Slept by 11pm at least 5 nights",                      cat:"life"},
+    {id:"wt7", text:"Drove or did theory practice at least once",            cat:"driving"},
+    {id:"wt8", text:"Ate home-cooked meals 4+ nights",                      cat:"life"},
+  ],
+  weeklyReview: [
+    {id:"wr1", text:"Review weekly tasks — how many did I hit?"},
+    {id:"wr2", text:"Look at milestone progress — anything to tick off?"},
+    {id:"wr3", text:"What was the biggest friction point this week?"},
+    {id:"wr4", text:"What one thing would make next week meaningfully better?"},
+    {id:"wr5", text:"Set 3 priority flexible tasks for Monday"},
+    {id:"wr6", text:"Check in on side project — is it moving forward?"},
+    {id:"wr7", text:"Plan meals for the coming week"},
+  ],
+  categories: [
+    { id:"career", name:"Career & qualifications", milestones:[
+      {id:"c1",  t:"Research Staff Engineer vs Engineering Manager paths — decide direction", p:1, tag:"clarity"},
+      {id:"c2",  t:"List 10+ job postings for target role; note required certs & skills",    p:1, tag:"research"},
+      {id:"c3",  t:"Identify qualification 1: CKA (Kubernetes) or AWS Solutions Architect Pro", p:1, tag:"research"},
+      {id:"c4",  t:"Identify qualification 2: DORA/DevOps Institute cert or cloud-specific", p:1, tag:"research"},
+      {id:"c5",  t:"Enrol on qualification 1 + set weekly study schedule",                  p:1, tag:"enrol"},
+      {id:"c6",  t:"Complete all study modules for qualification 1",                         p:2, tag:"study"},
+      {id:"c7",  t:"Pass qualification 1 exam",                                              p:2, tag:"milestone"},
+      {id:"c8",  t:"Enrol on qualification 2",                                               p:2, tag:"enrol"},
+      {id:"c9",  t:"Complete all study modules for qualification 2",                         p:2, tag:"study"},
+      {id:"c10", t:"Pass qualification 2 exam",                                              p:3, tag:"milestone"},
+      {id:"c11", t:"Rewrite CV with certs, senior-level framing, and impact metrics",        p:3, tag:"job hunt"},
+      {id:"c12", t:"Update LinkedIn — open to work, new creds, summary rewritten",          p:3, tag:"job hunt"},
+      {id:"c13", t:"Reach out to 5 people in target roles for informal conversations",       p:3, tag:"networking"},
+      {id:"c14", t:"Apply to 10+ target roles",                                              p:3, tag:"job hunt"},
+      {id:"c15", t:"Complete technical interview prep (system design, infra at scale)",      p:3, tag:"prep"},
+      {id:"c16", t:"Receive and evaluate offer(s)",                                          p:3, tag:"milestone"},
+    ]},
+    { id:"driving", name:"Driving", milestones:[
+      {id:"d1",  t:"Book provisional licence (if not already held)",                         p:1, tag:"admin"},
+      {id:"d2",  t:"Download DVSA theory app + begin daily practice (20 min/day)",          p:1, tag:"study"},
+      {id:"d3",  t:"Complete hazard perception practice — full mock tests",                  p:1, tag:"study"},
+      {id:"d4",  t:"Book theory test date",                                                  p:1, tag:"admin"},
+      {id:"d5",  t:"Pass theory test",                                                       p:1, tag:"milestone"},
+      {id:"d6",  t:"Research and book a driving instructor",                                 p:1, tag:"admin"},
+      {id:"d7",  t:"Complete lessons 1–10 (basic control, junctions, roundabouts)",         p:1, tag:"lessons"},
+      {id:"d8",  t:"Complete lessons 11–20 (dual carriageway, manoeuvres)",                 p:2, tag:"lessons"},
+      {id:"d9",  t:"Complete lessons 21–30 (independent driving, mock tests)",              p:2, tag:"lessons"},
+      {id:"d10", t:"First full mock test with instructor — identify weak areas",             p:2, tag:"assessment"},
+      {id:"d11", t:"Address weak areas; second mock test",                                   p:2, tag:"assessment"},
+      {id:"d12", t:"Book practical test date",                                               p:2, tag:"admin"},
+      {id:"d13", t:"Pass practical driving test",                                            p:2, tag:"milestone"},
+      {id:"d14", t:"Buy or access a car for independent practice",                           p:3, tag:"next step"},
+    ]},
+    { id:"health", name:"Health & fitness", milestones:[
+      {id:"h1",  t:"Get full physio diagnosis clarified — push for imaging if needed",       p:1, tag:"injury"},
+      {id:"h2",  t:"Establish injury-safe movement baselines with physio",                   p:1, tag:"injury"},
+      {id:"h3",  t:"Follow physio rehab protocol consistently (3x/week minimum)",           p:1, tag:"rehab"},
+      {id:"h4",  t:"Set up home or gym upper body programme (push/pull/carry focus)",       p:1, tag:"strength"},
+      {id:"h5",  t:"Track 3 baseline lifts (e.g. press, row, carry) — note week 1 numbers",p:1, tag:"strength"},
+      {id:"h6",  t:"Achieve 6 consecutive weeks of unbroken strength sessions",             p:2, tag:"strength"},
+      {id:"h7",  t:"Hit +20% on all 3 tracked lifts vs baseline",                           p:2, tag:"milestone"},
+      {id:"h8",  t:"Introduce low-impact cardio (swimming, cycling) if physio-cleared",     p:2, tag:"cardio"},
+      {id:"h9",  t:"Run a 5k or complete an open water swim — marker of return",            p:2, tag:"milestone"},
+      {id:"h10", t:"Build to 3 cardio + 3 strength sessions per week",                      p:3, tag:"training"},
+      {id:"h11", t:"Re-enter a triathlon (sprint distance) — even just to finish",          p:3, tag:"milestone"},
+      {id:"h12", t:"Set a training target for the year after the move",                      p:3, tag:"planning"},
+    ]},
+    { id:"income", name:"Second income (online)", milestones:[
+      {id:"i1",  t:"Brainstorm 10 ideas using your DevOps skills (templates, courses, tools)", p:1, tag:"ideation"},
+      {id:"i2",  t:"Validate top 3 ideas: search Gumroad, Udemy, GitHub sponsors for demand",  p:1, tag:"validate"},
+      {id:"i3",  t:"Choose one vehicle: Gumroad templates, Udemy course, or SaaS micro-tool",  p:1, tag:"decide"},
+      {id:"i4",  t:"Define the MVP: what's the smallest version you can ship?",                 p:1, tag:"plan"},
+      {id:"i5",  t:"Build and publish MVP (CI/CD pipeline templates, Terraform modules, etc.)", p:2, tag:"build"},
+      {id:"i6",  t:"List on platform with a strong product description + README",               p:2, tag:"launch"},
+      {id:"i7",  t:"Share in 3 communities (r/devops, HN, relevant Discord/Slack)",            p:2, tag:"market"},
+      {id:"i8",  t:"Earn first £100 outside main job",                                          p:2, tag:"milestone"},
+      {id:"i9",  t:"Collect feedback — iterate or build v2 / second product",                  p:2, tag:"iterate"},
+      {id:"i10", t:"Set up basic email list or GitHub following to own your audience",          p:2, tag:"audience"},
+      {id:"i11", t:"Reach £300+/month consistently",                                            p:3, tag:"milestone"},
+      {id:"i12", t:"Decide: double down on this stream or add a second product line",           p:3, tag:"strategy"},
+      {id:"i13", t:"Structure income properly (self-assessment registered, invoicing in place)",p:3, tag:"admin"},
+    ]},
+    { id:"life", name:"Personal life & foundations", milestones:[
+      {id:"l1",  t:"Set a fixed wake time and commit 7 days a week for 2 weeks",              p:1, tag:"sleep"},
+      {id:"l2",  t:"Design a wind-down routine (no screens 30 min before bed)",               p:1, tag:"sleep"},
+      {id:"l3",  t:"Sleep by 11pm 5/7 nights for 4 consecutive weeks",                       p:1, tag:"sleep"},
+      {id:"l4",  t:"Learn 4 base meals from scratch (batch-friendly)",                        p:1, tag:"cooking"},
+      {id:"l5",  t:"Meal plan and grocery shop once a week for 4 consecutive weeks",          p:1, tag:"cooking"},
+      {id:"l6",  t:"Build a recipe bank of 8–10 meals you can cook without looking",         p:2, tag:"cooking"},
+      {id:"l7",  t:"Meal prep Sundays as a fixed weekly habit",                               p:2, tag:"cooking"},
+      {id:"l8",  t:"Research 3 target cities/areas — cost of living, job market, lifestyle", p:1, tag:"move"},
+      {id:"l9",  t:"Visit or deeply research top 1–2 locations",                             p:2, tag:"move"},
+      {id:"l10", t:"Set a move budget: savings target, upfront costs, moving costs",          p:2, tag:"move"},
+      {id:"l11", t:"Hit move savings target",                                                 p:3, tag:"move"},
+      {id:"l12", t:"Shortlist specific neighbourhoods and types of home",                     p:3, tag:"move"},
+      {id:"l13", t:"Ready to relocate — start the search",                                   p:3, tag:"milestone"},
+    ]},
+  ],
+};
+
+// ── persistence ───────────────────────────────────────────────────────────────
+function ld(k, def) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : def; } catch { return def; } }
+function sv(k, v)   { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+const todayKey = () => new Date().toISOString().slice(0,10);
+const weekKey  = () => { const d=new Date(); const off=d.getDay()===0?6:d.getDay()-1; const m=new Date(d); m.setDate(d.getDate()-off); return m.toISOString().slice(0,10); };
+const uid = () => Math.random().toString(36).slice(2,9);
+
+// ── small UI pieces ────────────────────────────────────────────────────────────
+const Tick = ({done, color, size=18}) => (
+  <div style={{width:size,height:size,borderRadius:"50%",flexShrink:0,border:done?"none":"1.5px solid #d0d0d0",background:done?color:"transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .16s",cursor:"pointer"}}>
+    {done && <svg width="9" height="7" viewBox="0 0 9 7" fill="none"><path d="M1 3.5l2.5 2.5 4.5-5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+  </div>
+);
+
+const Bar = ({pct, color, h=5}) => (
+  <div style={{flex:1,height:h,borderRadius:h,background:"#e8e8e8",overflow:"hidden"}}>
+    <div style={{height:"100%",width:`${pct}%`,background:color,borderRadius:h,transition:"width .4s"}}/>
+  </div>
+);
+
+const Pill = ({label, color="#aaa"}) => (
+  <span style={{fontSize:10,padding:"1px 7px",borderRadius:10,background:color+"22",color,fontWeight:500}}>{label}</span>
+);
+
+function InlineEdit({value, onSave, style={}, multiline=false}) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(value);
+  const ref = useRef();
+  useEffect(() => { if (editing && ref.current) ref.current.focus(); }, [editing]);
+  useEffect(() => { setVal(value); }, [value]);
+  const commit = () => { setEditing(false); if (val.trim()) onSave(val.trim()); else setVal(value); };
+  if (!editing) return (
+    <span onClick={() => setEditing(true)} title="Click to edit"
+      style={{cursor:"text",borderBottom:"1px dashed transparent",transition:"border-color .15s",...style}}
+      onMouseEnter={e=>e.currentTarget.style.borderBottomColor="#ccc"}
+      onMouseLeave={e=>e.currentTarget.style.borderBottomColor="transparent"}>
+      {value}
+    </span>
+  );
+  if (multiline) return (
+    <textarea ref={ref} value={val} onChange={e=>setVal(e.target.value)}
+      onBlur={commit} onKeyDown={e=>{if(e.key==="Escape"){setEditing(false);setVal(value);}}}
+      style={{width:"100%",border:"1px solid #d0d0d0",borderRadius:6,padding:"3px 6px",resize:"vertical",minHeight:48,...style}}/>
+  );
+  return (
+    <input ref={ref} value={val} onChange={e=>setVal(e.target.value)}
+      onBlur={commit} onKeyDown={e=>{if(e.key==="Enter")commit();if(e.key==="Escape"){setEditing(false);setVal(value);}}}
+      style={{border:"1px solid #d0d0d0",borderRadius:6,padding:"3px 8px",width:"100%",...style}}/>
+  );
+}
+
+// ── draggable list ─────────────────────────────────────────────────────────────
+function DraggableList({items, renderItem, onReorder, editMode}) {
+  const dragIdx = useRef(null);
+  const [overIdx, setOverIdx] = useState(null);
+
+  if (!editMode) return <div>{items.map((item,i) => renderItem(item, i, false))}</div>;
+
+  return (
+    <div>
+      {items.map((item, i) => (
+        <div key={item.id}
+          draggable
+          onDragStart={() => { dragIdx.current = i; }}
+          onDragOver={e => { e.preventDefault(); setOverIdx(i); }}
+          onDragLeave={() => setOverIdx(null)}
+          onDrop={() => {
+            if (dragIdx.current === null || dragIdx.current === i) { setOverIdx(null); return; }
+            const next = [...items];
+            const [moved] = next.splice(dragIdx.current, 1);
+            next.splice(i, 0, moved);
+            onReorder(next);
+            dragIdx.current = null;
+            setOverIdx(null);
+          }}
+          onDragEnd={() => { dragIdx.current = null; setOverIdx(null); }}
+          style={{outline: overIdx === i ? "2px dashed #378ADD" : "none", borderRadius:8, transition:"outline .1s"}}
+        >
+          {renderItem(item, i, true)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── editable checklist section ────────────────────────────────────────────────
+function CheckSection({title, emoji, items, checks, onToggle, onReorder, onEdit, onDelete, onAdd, editMode, defaultColor="#1D9E75", catColors=null}) {
+  const dk = todayKey();
+  const done = items.filter(r => checks[r.id]).length;
+
+  return (
+    <div style={{border:"0.5px solid #e8e8e8",borderRadius:14,padding:"14px 16px",marginBottom:14,background:"#fff"}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+        <span style={{fontSize:15}}>{emoji}</span>
+        <span style={{fontSize:14,fontWeight:600}}>{title}</span>
+        <span style={{marginLeft:"auto",fontSize:12,color:"#aaa"}}>{done}/{items.length}</span>
+      </div>
+      <DraggableList items={items} editMode={editMode} onReorder={onReorder}
+        renderItem={(item, i, drag) => {
+          const color = catColors ? (CAT_COLORS[item.cat] || defaultColor) : defaultColor;
+          const isDone = !!checks[item.id];
+          return (
+            <div key={item.id} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"7px 6px",borderRadius:8,borderBottom:"0.5px solid #f0f0f0",background:"transparent",transition:"background .12s",cursor:drag?"grab":"pointer"}}
+              onMouseEnter={e=>{if(!drag)e.currentTarget.style.background="#f5f5f4"}}
+              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+              {drag && <span style={{color:"#ccc",fontSize:14,marginTop:2,flexShrink:0,cursor:"grab"}}>⠿</span>}
+              <div onClick={() => !editMode && onToggle(item.id)} style={{marginTop:2}}>
+                <Tick done={isDone} color={color}/>
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                {editMode
+                  ? <InlineEdit value={item.text||item.t} onSave={v=>onEdit(item.id,v)} style={{fontSize:13,color:"#222"}}/>
+                  : <div style={{fontSize:13,color:isDone?"#bbb":"#222",textDecoration:isDone?"line-through":"none",lineHeight:1.45}}>{item.text||item.t}</div>}
+                {item.cat && <div style={{marginTop:3}}><Pill label={item.cat} color={CAT_COLORS[item.cat]}/>{item.tag&&<>&nbsp;<Pill label={item.tag}/></>}</div>}
+              </div>
+              {editMode && <button onClick={()=>onDelete(item.id)} style={{flexShrink:0,border:"none",background:"none",color:"#ddd",cursor:"pointer",fontSize:16,padding:"0 2px",lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.color="#e24b4a"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>×</button>}
+            </div>
+          );
+        }}
+      />
+      {editMode && (
+        <button onClick={onAdd} style={{marginTop:8,width:"100%",padding:"6px",border:"1px dashed #d0d0d0",borderRadius:8,background:"transparent",color:"#aaa",cursor:"pointer",fontSize:12,transition:"all .15s"}}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor="#378ADD";e.currentTarget.style.color="#378ADD"}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor="#d0d0d0";e.currentTarget.style.color="#aaa"}}>
+          + add item
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── main app ──────────────────────────────────────────────────────────────────
+function App() {
+  const [tab, setTab]               = useState("today");
+  const [editMode, setEditMode]     = useState(false);
+  const [phaseFilter, setPhaseFilter] = useState("all");
+
+  // editable content (persisted)
+  const [data, setData] = useState(() => ld("lp3_data", DEFAULT_DATA));
+
+  // check state (keyed by id for lists, catId-msId for milestones)
+  const [dayChecks,  setDayChecks]  = useState(() => ld("lp3_dc", {}));
+  const [weekChecks, setWeekChecks] = useState(() => ld("lp3_wc", {}));
+  const [msChecks,   setMsChecks]   = useState(() => ld("lp3_ms", {}));
+  const [collapsed,  setCollapsed]  = useState(() => ld("lp3_col", {}));
+
+  const dk = todayKey();
+  const wk = weekKey();
+
+  const saveData = d => { setData(d); sv("lp3_data", d); };
+
+  // day checks keyed as date+id
+  const togDay = id => { const k=`${dk}-${id}`; const n={...dayChecks,[k]:!dayChecks[k]}; setDayChecks(n); sv("lp3_dc",n); };
+  const togWeek = id => { const k=`${wk}-${id}`; const n={...weekChecks,[k]:!weekChecks[k]}; setWeekChecks(n); sv("lp3_wc",n); };
+  const togMs  = id => { const n={...msChecks,[id]:!msChecks[id]}; setMsChecks(n); sv("lp3_ms",n); };
+  const togCol = id => { const n={...collapsed,[id]:!collapsed[id]}; setCollapsed(n); sv("lp3_col",n); };
+
+  // helpers for editing lists
+  const editList = (key, id, text) => saveData({...data, [key]: data[key].map(x=>x.id===id?{...x,text}:x)});
+  const deleteList = (key, id) => saveData({...data, [key]: data[key].filter(x=>x.id!==id)});
+  const addList = (key, defaults={}) => saveData({...data, [key]: [...data[key], {id:uid(), text:"New item", ...defaults}]});
+  const reorderList = (key, items) => saveData({...data, [key]: items});
+
+  // milestone helpers
+  const editMs = (catId, msId, field, val) => saveData({...data, categories: data.categories.map(c=>c.id===catId?{...c,milestones:c.milestones.map(m=>m.id===msId?{...m,[field]:val}:m)}:c)});
+  const deleteMs = (catId, msId) => saveData({...data, categories: data.categories.map(c=>c.id===catId?{...c,milestones:c.milestones.filter(m=>m.id!==msId)}:c)});
+  const addMs = (catId) => saveData({...data, categories: data.categories.map(c=>c.id===catId?{...c,milestones:[...c.milestones,{id:uid(),t:"New milestone",p:1,tag:""}]}:c)});
+  const reorderMs = (catId, items) => saveData({...data, categories: data.categories.map(c=>c.id===catId?{...c,milestones:items}:c)});
+
+  // stats
+  const totalMs = data.categories.reduce((a,c)=>a+c.milestones.length,0);
+  const doneMs  = data.categories.reduce((a,c)=>a+c.milestones.filter(m=>msChecks[m.id]).length,0);
+  const mrDone  = data.morningRoutine.filter(r=>dayChecks[`${dk}-${r.id}`]).length;
+  const erDone  = data.eveningRoutine.filter(r=>dayChecks[`${dk}-${r.id}`]).length;
+  const wtDone  = data.weeklyTasks.filter(t=>weekChecks[`${wk}-${t.id}`]).length;
+  const wrDone  = data.weeklyReview.filter(r=>weekChecks[`${wk}-${r.id}`]).length;
+
+  const todayStr = new Date().toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long"});
+
+  // ── today ──────────────────────────────────────────────────────────────────
+  const TodayTab = () => (
+    <div>
+      <div style={{fontSize:13,color:"#888",marginBottom:20}}>{todayStr}</div>
+      <CheckSection title="Morning routine" emoji="🌅" items={data.morningRoutine}
+        checks={Object.fromEntries(data.morningRoutine.map(r=>[r.id,!!dayChecks[`${dk}-${r.id}`]]))}
+        onToggle={togDay} onReorder={items=>reorderList("morningRoutine",items)}
+        onEdit={(id,v)=>editList("morningRoutine",id,v)} onDelete={id=>deleteList("morningRoutine",id)}
+        onAdd={()=>addList("morningRoutine")} editMode={editMode} defaultColor="#1D9E75"/>
+
+      <CheckSection title="Today's tasks" emoji="⚡" items={data.flexTasks}
+        checks={Object.fromEntries(data.flexTasks.map(r=>[r.id,!!dayChecks[`${dk}-${r.id}`]]))}
+        onToggle={togDay} onReorder={items=>reorderList("flexTasks",items)}
+        onEdit={(id,v)=>editList("flexTasks",id,v)} onDelete={id=>deleteList("flexTasks",id)}
+        onAdd={()=>addList("flexTasks",{cat:"life",tag:""})} editMode={editMode} catColors={true} defaultColor="#888"/>
+
+      <CheckSection title="Evening routine" emoji="🌙" items={data.eveningRoutine}
+        checks={Object.fromEntries(data.eveningRoutine.map(r=>[r.id,!!dayChecks[`${dk}-${r.id}`]]))}
+        onToggle={togDay} onReorder={items=>reorderList("eveningRoutine",items)}
+        onEdit={(id,v)=>editList("eveningRoutine",id,v)} onDelete={id=>deleteList("eveningRoutine",id)}
+        onAdd={()=>addList("eveningRoutine")} editMode={editMode} defaultColor="#7F77DD"/>
+    </div>
+  );
+
+  // ── week ───────────────────────────────────────────────────────────────────
+  const WeekTab = () => {
+    const ws = new Date(); const off=ws.getDay()===0?6:ws.getDay()-1; ws.setDate(ws.getDate()-off);
+    const wLabel = ws.toLocaleDateString("en-GB",{day:"numeric",month:"short"});
+    return (
+      <div>
+        <div style={{fontSize:13,color:"#888",marginBottom:20}}>Week of {wLabel}</div>
+        <CheckSection title="Weekly goals" emoji="📋" items={data.weeklyTasks}
+          checks={Object.fromEntries(data.weeklyTasks.map(r=>[r.id,!!weekChecks[`${wk}-${r.id}`]]))}
+          onToggle={togWeek} onReorder={items=>reorderList("weeklyTasks",items)}
+          onEdit={(id,v)=>editList("weeklyTasks",id,v)} onDelete={id=>deleteList("weeklyTasks",id)}
+          onAdd={()=>addList("weeklyTasks",{cat:"life"})} editMode={editMode} catColors={true} defaultColor="#378ADD"/>
+
+        <CheckSection title="Sunday evening review" emoji="🔍" items={data.weeklyReview}
+          checks={Object.fromEntries(data.weeklyReview.map(r=>[r.id,!!weekChecks[`${wk}-${r.id}`]]))}
+          onToggle={togWeek} onReorder={items=>reorderList("weeklyReview",items)}
+          onEdit={(id,v)=>editList("weeklyReview",id,v)} onDelete={id=>deleteList("weeklyReview",id)}
+          onAdd={()=>addList("weeklyReview")} editMode={editMode} defaultColor="#EF9F27"/>
+      </div>
+    );
+  };
+
+  // ── milestones ─────────────────────────────────────────────────────────────
+  const MilestonesTab = () => (
+    <div>
+      <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
+        {[["all","#555"],["1",PC[1]],["2",PC[2]],["3",PC[3]]].map(([val,col])=>(
+          <button key={val} onClick={()=>setPhaseFilter(val)} style={{fontSize:11,padding:"4px 12px",borderRadius:20,cursor:"pointer",border:phaseFilter===val?"none":"0.5px solid #ccc",background:phaseFilter===val?col:"transparent",color:phaseFilter===val?"#fff":"#666",fontWeight:phaseFilter===val?600:400,transition:"all .15s"}}>
+            {val==="all"?"All phases":`Phase ${val}`}
+          </button>
+        ))}
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        {data.categories.map(cat => {
+          const color = CAT_COLORS[cat.id] || "#888";
+          const visible = cat.milestones.filter(m=>phaseFilter==="all"||m.p===parseInt(phaseFilter));
+          if (!visible.length && !editMode) return null;
+          const catDone = cat.milestones.filter(m=>msChecks[m.id]).length;
+          const isCol = collapsed[cat.id];
+          const dragIdx = useRef(null);
+          const [overIdx, setOverIdx] = useState(null);
+
+          return (
+            <div key={cat.id} style={{border:"0.5px solid #e8e8e8",borderRadius:14,padding:"12px 14px",background:"#fff"}}>
+              <div onClick={()=>!editMode&&togCol(cat.id)} style={{display:"flex",alignItems:"center",gap:8,marginBottom:isCol&&!editMode?0:10,cursor:"pointer",userSelect:"none"}}>
+                <div style={{width:8,height:8,borderRadius:"50%",background:color,flexShrink:0}}/>
+                {editMode
+                  ? <InlineEdit value={cat.name} onSave={v=>saveData({...data,categories:data.categories.map(c=>c.id===cat.id?{...c,name:v}:c)})} style={{fontSize:13,fontWeight:600,flex:1}}/>
+                  : <span style={{fontSize:13,fontWeight:600,flex:1,lineHeight:1.3}}>{cat.name}</span>}
+                <span style={{fontSize:11,color:"#aaa",flexShrink:0}}>{catDone}/{cat.milestones.length}</span>
+                {!editMode && <span style={{fontSize:11,color:"#ccc",transform:isCol?"rotate(-90deg)":"none",display:"inline-block",transition:"transform .2s"}}>▾</span>}
+              </div>
+
+              {(!isCol || editMode) && <>
+                <Bar pct={cat.milestones.length?Math.round((catDone/cat.milestones.length)*100):0} color={color}/>
+                <div style={{marginTop:10}}>
+                  {(editMode ? cat.milestones : visible).map((ms,i)=>{
+                    const done = !!msChecks[ms.id];
+                    return (
+                      <div key={ms.id}
+                        draggable={editMode}
+                        onDragStart={()=>{dragIdx.current=i;}}
+                        onDragOver={e=>{e.preventDefault();setOverIdx(i);}}
+                        onDragLeave={()=>setOverIdx(null)}
+                        onDrop={()=>{
+                          if(dragIdx.current===null||dragIdx.current===i){setOverIdx(null);return;}
+                          const next=[...cat.milestones];
+                          const [moved]=next.splice(dragIdx.current,1);
+                          next.splice(i,0,moved);
+                          reorderMs(cat.id,next);
+                          dragIdx.current=null;setOverIdx(null);
+                        }}
+                        onDragEnd={()=>{dragIdx.current=null;setOverIdx(null);}}
+                        style={{display:"flex",alignItems:"flex-start",gap:9,padding:"7px 6px",borderRadius:8,borderBottom:"0.5px solid #f0f0f0",cursor:editMode?"grab":"pointer",background:overIdx===i&&editMode?"#f0f7ff":"transparent",transition:"background .1s"}}
+                        onMouseEnter={e=>{if(!editMode)e.currentTarget.style.background="#f5f5f4"}}
+                        onMouseLeave={e=>{if(!editMode)e.currentTarget.style.background="transparent"}}>
+                        {editMode && <span style={{color:"#ccc",fontSize:14,marginTop:2,flexShrink:0}}>⠿</span>}
+                        <div onClick={()=>!editMode&&togMs(ms.id)} style={{marginTop:2,flexShrink:0}}>
+                          <Tick done={done} color={color}/>
+                        </div>
+                        <div style={{flex:1,minWidth:0}}>
+                          {editMode
+                            ? <InlineEdit value={ms.t} onSave={v=>editMs(cat.id,ms.id,"t",v)} multiline style={{fontSize:12}}/>
+                            : <div style={{fontSize:12,color:done?"#bbb":"#333",textDecoration:done?"line-through":"none",lineHeight:1.45}}>{ms.t}</div>}
+                          <div style={{display:"flex",gap:5,marginTop:3,alignItems:"center",flexWrap:"wrap"}}>
+                            {editMode
+                              ? <select value={ms.p} onChange={e=>editMs(cat.id,ms.id,"p",parseInt(e.target.value))} style={{fontSize:10,border:"1px solid #ddd",borderRadius:6,padding:"1px 4px",color:PC[ms.p]}}>
+                                  <option value={1}>Phase 1</option><option value={2}>Phase 2</option><option value={3}>Phase 3</option>
+                                </select>
+                              : <span style={{fontSize:10,fontWeight:600,color:PC[ms.p]}}>Ph.{ms.p}</span>}
+                            {editMode
+                              ? <input value={ms.tag} onChange={e=>editMs(cat.id,ms.id,"tag",e.target.value)} placeholder="tag" style={{fontSize:10,border:"1px solid #ddd",borderRadius:6,padding:"1px 6px",width:70}}/>
+                              : ms.tag && <Pill label={ms.tag}/>}
+                          </div>
+                        </div>
+                        {editMode && <button onClick={()=>deleteMs(cat.id,ms.id)} style={{flexShrink:0,border:"none",background:"none",color:"#ddd",cursor:"pointer",fontSize:16,padding:"0 2px"}} onMouseEnter={e=>e.currentTarget.style.color="#e24b4a"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>×</button>}
+                      </div>
+                    );
+                  })}
+                  {editMode && <button onClick={()=>addMs(cat.id)} style={{marginTop:8,width:"100%",padding:"6px",border:"1px dashed #d0d0d0",borderRadius:8,background:"transparent",color:"#aaa",cursor:"pointer",fontSize:12,transition:"all .15s"}} onMouseEnter={e=>{e.currentTarget.style.borderColor="#378ADD";e.currentTarget.style.color="#378ADD"}} onMouseLeave={e=>{e.currentTarget.style.borderColor="#d0d0d0";e.currentTarget.style.color="#aaa"}}>+ add milestone</button>}
+                </div>
+              </>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  // ── progress ───────────────────────────────────────────────────────────────
+  const ProgressTab = () => (
+    <div>
+      <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>
+        {[
+          {label:`${doneMs}/${totalMs}`,  sub:"Milestones done",   col:"#111"},
+          {label:`${Math.round((doneMs/totalMs||0)*100)}%`, sub:"Overall", col:"#111"},
+          {label:`${mrDone+erDone}/${data.morningRoutine.length+data.eveningRoutine.length}`, sub:"Today's routine", col:"#1D9E75"},
+          {label:`${wtDone}/${data.weeklyTasks.length}`, sub:"This week", col:"#378ADD"},
+        ].map((s,i)=>(
+          <div key={i} style={{flex:"1 1 110px",background:"#f7f7f6",borderRadius:10,padding:"10px 14px"}}>
+            <div style={{fontSize:20,fontWeight:700,color:s.col}}>{s.label}</div>
+            <div style={{fontSize:11,color:"#999",marginTop:2}}>{s.sub}</div>
+          </div>
+        ))}
+      </div>
+      {data.categories.map(cat=>{
+        const color = CAT_COLORS[cat.id]||"#888";
+        const total = cat.milestones.length;
+        const done  = cat.milestones.filter(m=>msChecks[m.id]).length;
+        const pct   = Math.round((done/total||0)*100);
+        return (
+          <div key={cat.id} style={{marginBottom:18}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+              <div style={{width:8,height:8,borderRadius:"50%",background:color,flexShrink:0}}/>
+              <span style={{fontSize:13,fontWeight:500,flex:1}}>{cat.name}</span>
+              <span style={{fontSize:12,color:"#999"}}>{done}/{total}</span>
+              <span style={{fontSize:12,fontWeight:700,color,minWidth:34,textAlign:"right"}}>{pct}%</span>
+            </div>
+            <Bar pct={pct} color={color}/>
+            <div style={{display:"flex",gap:6,marginTop:8}}>
+              {[1,2,3].map(ph=>{
+                const phMs   = cat.milestones.filter(m=>m.p===ph);
+                const phDone = phMs.filter(m=>msChecks[m.id]).length;
+                return (
+                  <div key={ph} style={{flex:1,background:"#f7f7f6",borderRadius:8,padding:"7px 10px"}}>
+                    <div style={{fontSize:10,color:PC[ph],fontWeight:600,marginBottom:3}}>Phase {ph}</div>
+                    <div style={{fontSize:12,fontWeight:600}}>{phDone}/{phMs.length}</div>
+                    <div style={{marginTop:5}}><Bar pct={phMs.length?Math.round((phDone/phMs.length)*100):0} color={PC[ph]}/></div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  // ── render ─────────────────────────────────────────────────────────────────
+  return (
+    <div style={{maxWidth:760,margin:"0 auto",padding:"20px 16px 60px"}}>
+
+      {/* header */}
+      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:22,gap:12}}>
+        <div>
+          <div style={{fontSize:11,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",color:"#aaa",marginBottom:5}}>6–12 month plan</div>
+          <h1 style={{fontSize:22,fontWeight:700,margin:"0 0 6px",lineHeight:1.2}}>Life change roadmap</h1>
+          <p style={{color:"#777",fontSize:13,lineHeight:1.5,margin:0}}>DevOps → senior role · driving · second income · stronger, healthier, moved</p>
+        </div>
+        <button onClick={()=>setEditMode(e=>!e)} style={{flexShrink:0,padding:"7px 14px",borderRadius:8,border:`1px solid ${editMode?"#378ADD":"#ddd"}`,background:editMode?"#E6F1FB":"#fff",color:editMode?"#378ADD":"#888",fontSize:12,fontWeight:600,cursor:"pointer",transition:"all .15s",whiteSpace:"nowrap",marginTop:4}}>
+          {editMode ? "✓ Done editing" : "✏ Edit"}
+        </button>
+      </div>
+
+      {editMode && (
+        <div style={{background:"#E6F1FB",border:"1px solid #b5d4f4",borderRadius:10,padding:"10px 14px",marginBottom:20,fontSize:12,color:"#0C447C",lineHeight:1.6}}>
+          <strong>Edit mode on</strong> — click any text to rename it · drag ⠿ to reorder · × to delete · + to add new items
+        </div>
+      )}
+
+      {/* phase cards */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:24}}>
+        {[
+          {n:1,title:"Foundations",    months:"Months 1–3",  focus:"Diagnose, enrol, establish routines"},
+          {n:2,title:"Build momentum", months:"Months 4–7",  focus:"Qualify, first income, driving test"},
+          {n:3,title:"Launch",         months:"Months 8–12", focus:"Senior role, relocate, scale income"},
+        ].map(ph=>{
+          let d=0,t=0;
+          data.categories.forEach(c=>c.milestones.forEach(m=>{if(m.p===ph.n){t++;if(msChecks[m.id])d++;}}));
+          return (
+            <div key={ph.n} onClick={()=>{setPhaseFilter(String(ph.n));setTab("milestones");}}
+              style={{border:"0.5px solid #e8e8e8",borderRadius:12,padding:"12px 14px 14px",position:"relative",overflow:"hidden",background:"#fff",cursor:"pointer",transition:"background .15s"}}
+              onMouseEnter={e=>e.currentTarget.style.background="#f9f9f8"}
+              onMouseLeave={e=>e.currentTarget.style.background="#fff"}>
+              <div style={{fontSize:11,color:"#aaa",marginBottom:2}}>Phase {ph.n}</div>
+              <div style={{fontSize:13,fontWeight:600,marginBottom:3}}>{ph.title}</div>
+              <div style={{fontSize:11,color:"#aaa",marginBottom:6}}>{ph.months}</div>
+              <div style={{fontSize:11,color:"#666",lineHeight:1.5,marginBottom:8}}>{ph.focus}</div>
+              <div style={{fontSize:11,fontWeight:600,color:PC[ph.n]}}>{d}/{t} done</div>
+              <div style={{position:"absolute",bottom:0,left:0,right:0,height:3,background:PC[ph.n]}}/>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* tabs */}
+      <div style={{display:"flex",borderBottom:"1px solid #e8e8e8",marginBottom:20,overflowX:"auto"}}>
+        {[["today","Today"],["week","This week"],["milestones","Milestones"],["progress","Progress"]].map(([val,label])=>(
+          <button key={val} onClick={()=>setTab(val)} style={{padding:"9px 16px",fontSize:13,fontWeight:tab===val?600:400,border:"none",background:"none",cursor:"pointer",color:tab===val?"#111":"#888",borderBottom:tab===val?"2px solid #111":"2px solid transparent",marginBottom:-1,transition:"all .15s",whiteSpace:"nowrap"}}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab==="today"      && <TodayTab/>}
+      {tab==="week"       && <WeekTab/>}
+      {tab==="milestones" && <MilestonesTab/>}
+      {tab==="progress"   && <ProgressTab/>}
+
+      <div style={{marginTop:32,paddingTop:16,borderTop:"0.5px solid #eee",fontSize:11,color:"#ccc",lineHeight:1.8}}>
+        Daily routine resets each day · Weekly goals reset each Monday · Milestones persist permanently · All edits save automatically
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
+HTMLEOF
+echo "Done. Size: $(wc -c < /mnt/user-data/outputs/life-plan.html) bytes"
